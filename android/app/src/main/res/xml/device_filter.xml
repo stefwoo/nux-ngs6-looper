@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MIDI device filter -->
+    <usb-device class="1" subclass="1" protocol="3" /> <!-- USB MIDI class -->
+    <usb-device class="1" subclass="3" protocol="0" /> <!-- USB MIDI class alternative -->
+    <usb-device class="239" subclass="3" protocol="1" /> <!-- USB MIDI class alternative -->
+</resources>
