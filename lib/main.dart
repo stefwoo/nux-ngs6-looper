@@ -133,11 +133,11 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
                 looperProgress: looperProgress,
                 onDrumToggle: (v) {
                   setState(() => drumOn = v);
-                  _sendMidi(v ? '90 3C 7F' : '80 3C 7F');
+                  _sendMidi(v ? 'B0 29 01' : 'B0 29 00');
                 },
                 onDrumStyleChange: (v) {
                   setState(() => drumStyle = v);
-                  _sendMidi('90 3D ${v.toRadixString(16)}');
+                  _sendMidi('B0 2A ${v.toRadixString(16).padLeft(2, '0')}');
                 },
                 onClear: () {
                   setState(() {

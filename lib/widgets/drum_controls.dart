@@ -72,7 +72,7 @@ class DrumControls extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    '风格选择 (00-75)',
+                    '风格选择 (00-42)',
                     style: TextStyle(color: AppColors.secondaryText, fontSize: 14),
                   ),
                   Container(
@@ -98,7 +98,7 @@ class DrumControls extends StatelessWidget {
                 child: Slider(
                   value: styleValue.toDouble(),
                   min: 0,
-                  max: 75,
+                  max: 66,
                   activeColor: AppColors.accentCyan,
                   inactiveColor: AppColors.sliderBg,
                   onChanged: (value) => onStyleChange(value.round()),
@@ -112,7 +112,7 @@ class DrumControls extends StatelessWidget {
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () => onStyleChange(styleValue > 0 ? styleValue - 1 : 75),
+                onTap: () => onStyleChange(styleValue > 0 ? styleValue - 1 : 66),
                 child: Container(
                   height: 45,
                   decoration: BoxDecoration(
@@ -131,7 +131,7 @@ class DrumControls extends StatelessWidget {
             const SizedBox(width: 15),
             Expanded(
               child: GestureDetector(
-                onTap: () => onStyleChange(styleValue < 75 ? styleValue + 1 : 0),
+                onTap: () => onStyleChange(styleValue < 66 ? styleValue + 1 : 0),
                 child: Container(
                   height: 45,
                   decoration: BoxDecoration(
