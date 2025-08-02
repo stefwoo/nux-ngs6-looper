@@ -16,24 +16,29 @@ class LooperStatus extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'LOOPER',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            color: AppColors.secondaryText,
-            letterSpacing: 1,
+        const Padding(
+          padding: EdgeInsets.only(left: 5),
+          child: Text(
+            'LOOPER',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: AppColors.secondaryText,
+              letterSpacing: 1,
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.04),
+            color: AppColors.statusContainerBg,
             borderRadius: BorderRadius.circular(15),
           ),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          constraints: const BoxConstraints(minHeight: 70),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Row(
                 children: [
@@ -68,7 +73,7 @@ class LooperStatus extends StatelessWidget {
               Container(
                 height: 3,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: AppColors.timeProgressBg,
                   borderRadius: BorderRadius.circular(2),
                 ),
                 child: FractionallySizedBox(

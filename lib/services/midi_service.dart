@@ -7,9 +7,23 @@ class MidiService {
   Future<List<MidiDevice>> getUsbDevices() async {
     try {
       final result = await platform.invokeMethod('getUsbDevices');
-      return (result as List).map((item) => MidiDevice.fromMap(item)).toList();
+      // 更安全的类型转换
+      return (result as List).map((item) {
+        final map = Map<String, dynamic>.from(item as Map);
+        return MidiDevice.fromMap(map);
+      }).toList();
     } on PlatformException catch (e) {
       throw Exception('Failed to get USB devices: ${e.message}');
+    }
+  }
+
+  Future<bool> requestUsbPermission(int deviceId) async {
+    try {
+      return await platform.invokeMethod('requestUsbPermission', {
+        'deviceId': deviceId,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Failed to request USB permission: ${e.message}');
     }
   }
 
@@ -28,7 +42,11 @@ class MidiService {
     platform.setMethodCallHandler((call) async {
       if (call.method == 'onDeviceListUpdated') {
         final result = call.arguments as List;
-        final devices = result.map((item) => MidiDevice.fromMap(item)).toList();
+        // 更安全的类型转换
+        final devices = result.map((item) {
+          final map = Map<String, dynamic>.from(item as Map);
+          return MidiDevice.fromMap(map);
+        }).toList();
         onUpdate(devices);
       }
     });

@@ -93,15 +93,15 @@ class MainActivity : FlutterActivity() {
         }
 
         try {
-            val deviceList = usbManager.deviceList.values.map { device ->
-                mapOf(
-                    "deviceId" to device.deviceId,
-                    "deviceName" to getDeviceFriendlyName(device),
-                    "vendorId" to device.vendorId,
-                    "productId" to device.productId,
-                    "hasPermission" to usbManager.hasPermission(device)
-                )
-            }
+                    val deviceList = usbManager.deviceList.values.map { device ->
+                        hashMapOf<String, Any>(
+                            "deviceId" to device.deviceId,
+                            "deviceName" to getDeviceFriendlyName(device),
+                            "vendorId" to device.vendorId,
+                            "productId" to device.productId,
+                            "hasPermission" to usbManager.hasPermission(device)
+                        )
+                    }
             
             // 通知Flutter端设备列表已更新
             runOnUiThread {
@@ -207,13 +207,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
                     val deviceList = usbManager.deviceList.values.map { device ->
-                        try {
-                            usbManager.requestPermission(device, permissionIntent)
-                            Log.d(TAG, "Requested permission for device: ${getDeviceFriendlyName(device)}")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to request permission for device: ${getDeviceFriendlyName(device)}", e)
-                        }
-                        mapOf(
+                        hashMapOf<String, Any>(
                             "deviceId" to device.deviceId,
                             "deviceName" to getDeviceFriendlyName(device),
                             "vendorId" to device.vendorId,
@@ -222,6 +216,38 @@ class MainActivity : FlutterActivity() {
                         )
                     }
                     result.success(deviceList)
+                }
+                "requestUsbPermission" -> {
+                    val deviceId = call.argument<Int>("deviceId")
+                    if (deviceId == null) {
+                        result.error("INVALID_ARGUMENTS", "Device ID is null", null)
+                        return@setMethodCallHandler
+                    }
+                    
+                    if (!::usbManager.isInitialized) {
+                        result.error("USB_NOT_INITIALIZED", "USB manager not initialized", null)
+                        return@setMethodCallHandler
+                    }
+                    
+                    val device = usbManager.deviceList.values.find { it.deviceId == deviceId }
+                    if (device == null) {
+                        result.error("DEVICE_NOT_FOUND", "USB device not found", null)
+                        return@setMethodCallHandler
+                    }
+                    
+                    if (usbManager.hasPermission(device)) {
+                        result.success(true)
+                        return@setMethodCallHandler
+                    }
+                    
+                    try {
+                        usbManager.requestPermission(device, permissionIntent)
+                        Log.d(TAG, "Requested permission for device: ${getDeviceFriendlyName(device)}")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to request permission for device: ${getDeviceFriendlyName(device)}", e)
+                        result.error("PERMISSION_REQUEST_FAILED", e.message, null)
+                    }
                 }
                 "sendMidiMessage" -> {
                     val deviceId = call.argument<Int>("deviceId")

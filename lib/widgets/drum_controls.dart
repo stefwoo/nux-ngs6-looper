@@ -20,13 +20,16 @@ class DrumControls extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '鼓机',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            color: AppColors.secondaryText,
-            letterSpacing: 1,
+        const Padding(
+          padding: EdgeInsets.only(left: 5),
+          child: Text(
+            '鼓机',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: AppColors.secondaryText,
+              letterSpacing: 1,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -38,9 +41,7 @@ class DrumControls extends StatelessWidget {
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    color: isOn
-                        ? AppColors.accentGreen.withOpacity(0.15)
-                        : Colors.white.withOpacity(0.05),
+                    color: isOn ? AppColors.drumButtonActiveBg : AppColors.drumButtonBg,
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: Center(
@@ -61,10 +62,10 @@ class DrumControls extends StatelessWidget {
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.04),
+            color: AppColors.statusContainerBg,
             borderRadius: BorderRadius.circular(15),
           ),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Column(
             children: [
               Row(
@@ -99,53 +100,54 @@ class DrumControls extends StatelessWidget {
                   min: 0,
                   max: 75,
                   activeColor: AppColors.accentCyan,
-                  inactiveColor: Colors.white.withOpacity(0.1),
+                  inactiveColor: AppColors.sliderBg,
                   onChanged: (value) => onStyleChange(value.round()),
                 ),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => onStyleChange(styleValue > 0 ? styleValue - 1 : 75),
-                      child: Container(
-                        height: 45,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.03),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            '-',
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w300),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => onStyleChange(styleValue < 75 ? styleValue + 1 : 0),
-                      child: Container(
-                        height: 45,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.03),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            '+',
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w300),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onStyleChange(styleValue > 0 ? styleValue - 1 : 75),
+                child: Container(
+                  height: 45,
+                  decoration: BoxDecoration(
+                    color: AppColors.styleButtonBg,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '-',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w300),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onStyleChange(styleValue < 75 ? styleValue + 1 : 0),
+                child: Container(
+                  height: 45,
+                  decoration: BoxDecoration(
+                    color: AppColors.styleButtonBg,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '+',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w300),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

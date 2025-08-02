@@ -5,6 +5,8 @@ import 'services/midi_service.dart';
 import 'widgets/drum_controls.dart';
 import 'widgets/looper_status.dart';
 import 'widgets/looper_controls.dart';
+import 'widgets/main_content.dart';
+import 'widgets/midi_status_widget.dart';
 
 void main() => runApp(const MidiControllerApp());
 
@@ -12,10 +14,12 @@ class MidiControllerApp extends StatelessWidget {
   const MidiControllerApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'NUX NGS6 LOOPER',
-        theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: AppColors.background),
-        home: const MidiControllerPage(),
-      );
+    title: 'NUX NGS6 LOOPER',
+    theme: ThemeData.dark().copyWith(
+      scaffoldBackgroundColor: AppColors.background,
+    ),
+    home: const MidiControllerPage(),
+  );
 }
 
 class MidiControllerPage extends StatefulWidget {
@@ -28,6 +32,7 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
   final MidiService _midiService = MidiService();
   List<MidiDevice> devices = [];
   int? selectedDeviceId;
+  String? selectedDeviceName; // 新增：用于显示选中的设备名称
   bool drumOn = false;
   int drumStyle = 42;
   String looperStatus = '就绪';
@@ -36,144 +41,137 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
   @override
   void initState() {
     super.initState();
-    _loadDevices();
-    _midiService.setDeviceListListener((d) => setState(() => devices = d));
+    _loadDevices(); // 首次加载设备
+    _midiService.setDeviceListListener((d) {
+      setState(() {
+        devices = d;
+        debugPrint('Device list updated via listener: ${devices.length}');
+        for (var device in devices) {
+          debugPrint('Updated Device: ${device.deviceName}, ID: ${device.deviceId}, HasPermission: ${device.hasPermission}');
+        }
+        _autoSelectDevice(); // 设备列表更新时也尝试自动选择
+      });
+    });
   }
 
   Future<void> _loadDevices() async {
     try {
-      devices = await _midiService.getUsbDevices();
-      setState(() {});
+      // 首次加载时，先获取设备列表，此时可能尚未获得权限
+      final initialDevices = await _midiService.getUsbDevices();
+      debugPrint('Initial loaded devices: ${initialDevices.length}');
+      for (var d in initialDevices) {
+        debugPrint('Initial Device: ${d.deviceName}, ID: ${d.deviceId}, HasPermission: ${d.hasPermission}');
+      }
+      setState(() {
+        devices = initialDevices;
+        _autoSelectDevice(); // 尝试自动选择设备
+      });
     } catch (e) {
-      debugPrint('Error: $e');
+      debugPrint('Error loading devices: $e');
+    }
+  }
+
+  // 提取自动选择设备的逻辑
+  void _autoSelectDevice() {
+    if (selectedDeviceId == null && devices.isNotEmpty) {
+      final firstPermittedDevice = devices.firstWhere(
+        (device) => device.hasPermission,
+        orElse: () => devices.first,
+      );
+      selectedDeviceId = firstPermittedDevice.deviceId;
+      selectedDeviceName = firstPermittedDevice.deviceName;
+      debugPrint('Auto-selected device: ${selectedDeviceName} (ID: ${selectedDeviceId})');
     }
   }
 
   Future<void> _sendMidi(String msg) async {
-    if (selectedDeviceId == null) return;
+    if (selectedDeviceId == null) {
+      // 如果没有选择设备，显示提示
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先选择MIDI设备')),
+      );
+      return;
+    }
     try {
       await _midiService.sendMidiMessage(selectedDeviceId!, msg);
     } catch (e) {
       debugPrint('Error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发送MIDI消息失败: $e')),
+      );
     }
   }
 
-  void _showDeviceDialog() => showDialog(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const Text('选择MIDI设备'),
-          content: SizedBox(
-            width: 300,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: devices.length,
-              itemBuilder: (c, i) => ListTile(
-                title: Text(devices[i].deviceName),
-                subtitle: Text('VID: ${devices[i].vendorId} PID: ${devices[i].productId}'),
-                onTap: () {
-                  setState(() => selectedDeviceId = devices[i].deviceId);
-                  Navigator.pop(context); // 添加这行来关闭对话框
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.containerBg, AppColors.background],
+          ),
+        ),
+        child: Column(
+          children: [
+            MidiStatusWidget(
+              selectedDeviceName: selectedDeviceName,
+              devices: devices,
+              midiService: _midiService,
+              onDeviceSelected: (device) {
+                setState(() {
+                  selectedDeviceId = device.deviceId;
+                  selectedDeviceName = device.deviceName;
+                });
+              },
+              onRefreshDevices: _loadDevices,
+            ),
+            Expanded(
+              child: MainContent(
+                drumOn: drumOn,
+                drumStyle: drumStyle,
+                looperStatus: looperStatus,
+                looperProgress: looperProgress,
+                onDrumToggle: (v) {
+                  setState(() => drumOn = v);
+                  _sendMidi(v ? '90 3C 7F' : '80 3C 7F');
+                },
+                onDrumStyleChange: (v) {
+                  setState(() => drumStyle = v);
+                  _sendMidi('90 3D ${v.toRadixString(16)}');
+                },
+                onClear: () {
+                  setState(() {
+                    looperStatus = '已清除循环';
+                    looperProgress = 0.0;
+                  });
+                  _sendMidi('90 3E 7F');
+                },
+                onUndo: () {
+                  setState(() {
+                    looperStatus = '撤销操作';
+                    looperProgress = 0.5;
+                  });
+                  _sendMidi('90 3F 7F');
+                },
+                onRec: () {
+                  setState(() {
+                    looperStatus = '录音中: 录制第2层';
+                    looperProgress = 0.35;
+                  });
+                  _sendMidi('90 40 7F');
+                },
+                onStop: () {
+                  setState(() {
+                    looperStatus = '播放中: 1层录制完成';
+                    looperProgress = 0.65;
+                  });
+                  _sendMidi('90 41 7F');
                 },
               ),
             ),
-          ),
+          ],
         ),
-      );
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [AppColors.containerBg, AppColors.background]),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Stack(
-                    alignment: Alignment.topCenter, // 调整为顶部居中对齐
-                    children: [
-                      Positioned(
-                        top: 0, // 放置在顶部
-                        right: 0, // 放置在右侧
-                        child: GestureDetector(
-                          onTap: _showDeviceDialog,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentGreen.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              selectedDeviceId != null ? 'MIDI已连接' : '选择设备',
-                              style: const TextStyle(fontSize: 12, color: AppColors.accentGreen),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const Padding( // 给标题添加顶部填充，避免与MIDI状态重叠
-                        padding: EdgeInsets.only(top: 20.0), // 调整此值以获得最佳视觉效果
-                        child: Text('NUX NGS6 LOOPER',
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w300)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  DrumControls(
-                    isOn: drumOn,
-                    styleValue: drumStyle,
-                    onToggle: (v) {
-                      setState(() => drumOn = v);
-                      _sendMidi(v ? '90 3C 7F' : '80 3C 7F');
-                    },
-                    onStyleChange: (v) {
-                      setState(() => drumStyle = v);
-                      _sendMidi('90 3D ${v.toRadixString(16)}');
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  LooperStatus(status: looperStatus, progress: looperProgress),
-                  const SizedBox(height: 20),
-                  LooperControls(
-                    onClear: () {
-                      setState(() {
-                        looperStatus = '已清除循环';
-                        looperProgress = 0.0;
-                      });
-                      _sendMidi('90 3E 7F');
-                    },
-                    onUndo: () {
-                      setState(() {
-                        looperStatus = '撤销操作';
-                        looperProgress = 0.5;
-                      });
-                      _sendMidi('90 3F 7F');
-                    },
-                    onRec: () {
-                      setState(() {
-                        looperStatus = '录音中: 录制第2层';
-                        looperProgress = 0.35;
-                      });
-                      _sendMidi('90 40 7F');
-                    },
-                    onStop: () {
-                      setState(() {
-                        looperStatus = '播放中: 1层录制完成';
-                        looperProgress = 0.65;
-                      });
-                      _sendMidi('90 41 7F');
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    '通过USB MIDI控制连接至吉他效果器',
-                    style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      ),
+    ),
+  );
 }

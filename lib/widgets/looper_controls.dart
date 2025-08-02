@@ -25,7 +25,8 @@ class LooperControls extends StatelessWidget {
               child: _buildControlButton(
                 icon: '✖',
                 text: 'CLEAR',
-                color: AppColors.accentPurple,
+                bgColor: AppColors.clearButtonBg,
+                iconColor: AppColors.accentPurple,
                 onTap: onClear,
               ),
             ),
@@ -34,7 +35,8 @@ class LooperControls extends StatelessWidget {
               child: _buildControlButton(
                 icon: '↺',
                 text: 'UNDO',
-                color: AppColors.accentBlue,
+                bgColor: AppColors.undoButtonBg,
+                iconColor: AppColors.accentBlue,
                 onTap: onUndo,
               ),
             ),
@@ -47,7 +49,8 @@ class LooperControls extends StatelessWidget {
               child: _buildControlButton(
                 icon: '●',
                 text: 'REC',
-                color: AppColors.accentPink,
+                bgColor: AppColors.recButtonBg,
+                iconColor: AppColors.accentPink,
                 onTap: onRec,
               ),
             ),
@@ -56,7 +59,8 @@ class LooperControls extends StatelessWidget {
               child: _buildControlButton(
                 icon: '■',
                 text: 'STOP',
-                color: AppColors.accentRed,
+                bgColor: AppColors.stopButtonBg,
+                iconColor: AppColors.accentRed,
                 onTap: onStop,
               ),
             ),
@@ -69,15 +73,16 @@ class LooperControls extends StatelessWidget {
   Widget _buildControlButton({
     required String icon,
     required String text,
-    required Color color,
+    required Color bgColor,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 65,
+        constraints: const BoxConstraints(minHeight: 65),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
+          color: bgColor,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
@@ -87,7 +92,7 @@ class LooperControls extends StatelessWidget {
               icon,
               style: TextStyle(
                 fontSize: 18,
-                color: color,
+                color: iconColor,
               ),
             ),
             const SizedBox(height: 5),
@@ -96,7 +101,7 @@ class LooperControls extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: color,
+                color: iconColor,
               ),
             ),
           ],
