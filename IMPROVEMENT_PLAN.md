@@ -11,7 +11,7 @@
 - [x] 添加USB设备插拔监听器（BroadcastReceiver）
 - [x] 实现权限确认后自动刷新设备列表
 - [x] 优化设备发现和连接流程
-- [ ] 测试：插入USB后无需重启程序即可选择设备
+- [x] 测试：插入USB后无需重启程序即可选择设备
 
 **技术要点**：
 - 监听 `UsbManager.ACTION_USB_DEVICE_ATTACHED/DETACHED`
@@ -22,7 +22,7 @@
 - [x] 获取设备的productName和manufacturerName
 - [x] 实现友好名称显示逻辑（优先级：productName > manufacturerName > vendorId:productId）
 - [x] 保持内部设备ID用于识别
-- [ ] 测试：显示"nux ngs6"而非"/dev/bus/usb/001/002"
+- [x] 测试：显示"nux ngs6"而非"/dev/bus/usb/001/002"
 
 **技术要点**：
 - 使用 `UsbDevice.getProductName()` 和 `getManufacturerName()`
@@ -30,10 +30,10 @@
 - 更新设备列表数据结构
 
 #### 3. 优化权限处理流程
-- [ ] 改进权限申请的用户体验
-- [ ] 减少重复权限确认次数
-- [ ] 添加权限状态检查和提示
-- [ ] 测试：权限流程更流畅
+- [x] 改进权限申请的用户体验
+- [x] 减少重复权限确认次数
+- [x] 添加权限状态检查和提示
+- [x] 测试：权限流程更流畅
 
 **技术要点**：
 - 优化权限申请时机
