@@ -23,6 +23,13 @@ class MainActivity : FlutterActivity() {
     private lateinit var usbManager: UsbManager
     private lateinit var permissionIntent: PendingIntent
     private lateinit var methodChannel: MethodChannel
+    
+    // MIDI接收相关
+    private var midiConnection: UsbDeviceConnection? = null
+    private var midiInEndpoint: UsbEndpoint? = null
+    private var midiInterface: UsbInterface? = null
+    private var midiListeningThread: Thread? = null
+    private var isListening = false
 
     private val usbPermissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -61,12 +68,191 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopMidiListening()
         try {
             unregisterReceiver(usbPermissionReceiver)
             unregisterReceiver(usbDeviceReceiver)
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering receivers", e)
         }
+    }
+
+    /**
+     * 停止MIDI监听
+     */
+    private fun stopMidiListening() {
+        isListening = false
+        midiListeningThread?.interrupt()
+        midiListeningThread = null
+        
+        try {
+            midiInterface?.let { midiConnection?.releaseInterface(it) }
+            midiConnection?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping MIDI listening", e)
+        }
+        
+        midiConnection = null
+        midiInEndpoint = null
+        midiInterface = null
+        Log.d(TAG, "MIDI listening stopped")
+    }
+
+    /**
+     * 开始MIDI监听
+     */
+    private fun startMidiListening(deviceId: Int): Boolean {
+        try {
+            // 先停止之前的监听
+            stopMidiListening()
+            
+            val device = usbManager.deviceList.values.find { it.deviceId == deviceId }
+            if (device == null) {
+                Log.e(TAG, "Device not found for listening")
+                return false
+            }
+
+            if (!usbManager.hasPermission(device)) {
+                Log.e(TAG, "No permission for device")
+                return false
+            }
+
+            val connection = usbManager.openDevice(device)
+            if (connection == null) {
+                Log.e(TAG, "Failed to open device for listening")
+                return false
+            }
+
+            // 寻找MIDI输入接口和端点，但要避免与输出接口冲突
+            var inputInterface: UsbInterface? = null
+            var inputEndpoint: UsbEndpoint? = null
+
+            for (i in 0 until device.interfaceCount) {
+                val usbInterface = device.getInterface(i)
+                
+                // 检查是否有输入端点
+                for (j in 0 until usbInterface.endpointCount) {
+                    val endpoint = usbInterface.getEndpoint(j)
+                    if (endpoint.direction == UsbConstants.USB_DIR_IN) {
+                        inputInterface = usbInterface
+                        inputEndpoint = endpoint
+                        Log.d(TAG, "Found MIDI input endpoint in interface $i, endpoint $j")
+                        break
+                    }
+                }
+                if (inputInterface != null) break
+            }
+
+            if (inputInterface == null || inputEndpoint == null) {
+                Log.w(TAG, "MIDI input interface or endpoint not found, listening disabled")
+                connection.close()
+                return false
+            }
+
+            // 尝试声明接口，但不强制独占
+            if (!connection.claimInterface(inputInterface, false)) {
+                Log.w(TAG, "Failed to claim input interface non-exclusively, trying force claim")
+                if (!connection.claimInterface(inputInterface, true)) {
+                    Log.e(TAG, "Failed to claim input interface")
+                    connection.close()
+                    return false
+                }
+            }
+
+            midiConnection = connection
+            midiInterface = inputInterface
+            midiInEndpoint = inputEndpoint
+            isListening = true
+
+            // 启动监听线程
+            midiListeningThread = Thread {
+                listenForMidiMessages()
+            }
+            midiListeningThread?.start()
+
+            Log.d(TAG, "MIDI listening started for device $deviceId")
+            return true
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting MIDI listening", e)
+            return false
+        }
+    }
+
+    /**
+     * 监听MIDI消息的主循环
+     */
+    private fun listenForMidiMessages() {
+        val buffer = ByteArray(64) // USB MIDI包通常是4字节，但分配更大的缓冲区以防万一
+        
+        while (isListening && !Thread.currentThread().isInterrupted()) {
+            try {
+                val connection = midiConnection ?: break
+                val endpoint = midiInEndpoint ?: break
+                
+                val bytesRead = connection.bulkTransfer(endpoint, buffer, buffer.size, 100) // 100ms超时
+                
+                if (bytesRead > 0) {
+                    // 解析USB MIDI包
+                    for (i in 0 until bytesRead step 4) {
+                        if (i + 3 < bytesRead) {
+                            val packet = buffer.sliceArray(i until i + 4)
+                            val midiMessage = parseUsbMidiPacket(packet)
+                            if (midiMessage.isNotEmpty()) {
+                                // 转换为十六进制字符串格式
+                                val messageString = midiMessage.joinToString(" ") { "%02X".format(it) }
+                                Log.d(TAG, "Received MIDI message: $messageString")
+                                Log.d(TAG, "USB MIDI packet: ${packet.joinToString(" ") { "%02X".format(it) }}")
+                                
+                                // 通知Flutter端
+                                runOnUiThread {
+                                    if (::methodChannel.isInitialized) {
+                                        methodChannel.invokeMethod("onMidiMessageReceived", messageString)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (isListening) {
+                    Log.e(TAG, "Error in MIDI listening loop", e)
+                }
+                break
+            }
+        }
+        Log.d(TAG, "MIDI listening loop ended")
+    }
+
+    /**
+     * 解析USB MIDI包，提取MIDI消息
+     */
+    private fun parseUsbMidiPacket(packet: ByteArray): ByteArray {
+        if (packet.size < 4) return byteArrayOf()
+        
+        val cableAndCode = packet[0].toInt() and 0xFF
+        val codeIndexNumber = cableAndCode and 0x0F
+        
+        // 根据Code Index Number确定MIDI消息长度
+        val midiLength = when (codeIndexNumber) {
+            0x8, 0x9, 0xA, 0xB, 0xE -> 3 // Note On/Off, CC, Pitch Bend等3字节消息
+            0xC, 0xD -> 2 // Program Change, Channel Pressure等2字节消息
+            0xF -> when (packet[1].toInt() and 0xFF) {
+                0xF0 -> 3 // SysEx start (可能需要更复杂处理)
+                0xF1, 0xF3 -> 2 // MTC Quarter Frame, Song Select
+                0xF2 -> 3 // Song Position Pointer
+                0xF6, 0xF8, 0xFA, 0xFB, 0xFC, 0xFE, 0xFF -> 1 // 系统实时消息
+                else -> 1
+            }
+            0x2, 0x3 -> 3 // 其他3字节消息
+            0x4, 0x5, 0x6, 0x7 -> 3 // SysEx相关
+            else -> 0
+        }
+        
+        if (midiLength == 0) return byteArrayOf()
+        
+        // 提取MIDI数据字节（跳过第一个USB头字节）
+        return packet.sliceArray(1 until minOf(4, 1 + midiLength))
     }
 
     /**
@@ -379,6 +565,20 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {
                         result.error("EXCEPTION", e.message, null)
                     }
+                }
+                "startMidiListening" -> {
+                    val deviceId = call.argument<Int>("deviceId")
+                    if (deviceId == null) {
+                        result.error("INVALID_ARGUMENTS", "Device ID is null", null)
+                        return@setMethodCallHandler
+                    }
+                    
+                    val success = startMidiListening(deviceId)
+                    result.success(success)
+                }
+                "stopMidiListening" -> {
+                    stopMidiListening()
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }

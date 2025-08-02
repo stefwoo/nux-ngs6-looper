@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'constants/app_colors.dart';
 import 'models/midi_device.dart';
+import 'models/looper_state.dart';
 import 'services/midi_service.dart';
+import 'services/looper_state_manager.dart';
+import 'utils/midi_message_parser.dart';
 import 'widgets/drum_controls.dart';
 import 'widgets/looper_status.dart';
 import 'widgets/looper_controls.dart';
@@ -30,18 +33,25 @@ class MidiControllerPage extends StatefulWidget {
 
 class _MidiControllerPageState extends State<MidiControllerPage> {
   final MidiService _midiService = MidiService();
+  final LooperStateManager _looperStateManager = LooperStateManager();
   List<MidiDevice> devices = [];
   int? selectedDeviceId;
-  String? selectedDeviceName; // 新增：用于显示选中的设备名称
+  String? selectedDeviceName;
   bool drumOn = false;
   int drumStyle = 42;
   String looperStatus = '就绪';
   double looperProgress = 0.0;
+  bool _isMidiListening = false;
 
   @override
   void initState() {
     super.initState();
-    _loadDevices(); // 首次加载设备
+    _loadDevices();
+    _setupMidiListeners();
+    _setupLooperListeners();
+  }
+
+  void _setupMidiListeners() {
     _midiService.setDeviceListListener((d) {
       setState(() {
         devices = d;
@@ -49,9 +59,34 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
         for (var device in devices) {
           debugPrint('Updated Device: ${device.deviceName}, ID: ${device.deviceId}, HasPermission: ${device.hasPermission}');
         }
-        _autoSelectDevice(); // 设备列表更新时也尝试自动选择
+        _autoSelectDevice();
       });
     });
+
+    _midiService.setMidiMessageListener((message) {
+      debugPrint('Received MIDI message: $message');
+      _looperStateManager.handleMidiMessage(message);
+    });
+  }
+
+  void _setupLooperListeners() {
+    _looperStateManager.statusStream.listen((status) {
+      setState(() {
+        looperStatus = status;
+      });
+    });
+
+    _looperStateManager.buttonStatesStream.listen((buttonStates) {
+      setState(() {
+        // 触发UI重建以更新按钮状态
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _looperStateManager.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDevices() async {
@@ -81,12 +116,16 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
       selectedDeviceId = firstPermittedDevice.deviceId;
       selectedDeviceName = firstPermittedDevice.deviceName;
       debugPrint('Auto-selected device: ${selectedDeviceName} (ID: ${selectedDeviceId})');
+      
+      // 自动启动MIDI监听
+      if (firstPermittedDevice.hasPermission) {
+        _startMidiListening();
+      }
     }
   }
 
   Future<void> _sendMidi(String msg) async {
     if (selectedDeviceId == null) {
-      // 如果没有选择设备，显示提示
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先选择MIDI设备')),
       );
@@ -99,6 +138,36 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('发送MIDI消息失败: $e')),
       );
+    }
+  }
+
+  Future<void> _startMidiListening() async {
+    if (selectedDeviceId != null && !_isMidiListening) {
+      try {
+        final success = await _midiService.startMidiListening(selectedDeviceId!);
+        if (success) {
+          setState(() {
+            _isMidiListening = true;
+          });
+          debugPrint('MIDI listening started');
+        }
+      } catch (e) {
+        debugPrint('Failed to start MIDI listening: $e');
+      }
+    }
+  }
+
+  Future<void> _stopMidiListening() async {
+    if (_isMidiListening) {
+      try {
+        await _midiService.stopMidiListening();
+        setState(() {
+          _isMidiListening = false;
+        });
+        debugPrint('MIDI listening stopped');
+      } catch (e) {
+        debugPrint('Failed to stop MIDI listening: $e');
+      }
     }
   }
 
@@ -131,6 +200,7 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
                 drumStyle: drumStyle,
                 looperStatus: looperStatus,
                 looperProgress: looperProgress,
+                buttonStates: _looperStateManager.currentButtonStates,
                 onDrumToggle: (v) {
                   setState(() => drumOn = v);
                   _sendMidi(v ? 'B0 29 01' : 'B0 29 00');
@@ -139,34 +209,10 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
                   setState(() => drumStyle = v);
                   _sendMidi('B0 2A ${v.toRadixString(16).padLeft(2, '0')}');
                 },
-                onClear: () {
-                  setState(() {
-                    looperStatus = '已清除循环';
-                    looperProgress = 0.0;
-                  });
-                  _sendMidi('90 3E 7F');
-                },
-                onUndo: () {
-                  setState(() {
-                    looperStatus = '撤销操作';
-                    looperProgress = 0.5;
-                  });
-                  _sendMidi('90 3F 7F');
-                },
-                onRec: () {
-                  setState(() {
-                    looperStatus = '录音中: 录制第2层';
-                    looperProgress = 0.35;
-                  });
-                  _sendMidi('90 40 7F');
-                },
-                onStop: () {
-                  setState(() {
-                    looperStatus = '播放中: 1层录制完成';
-                    looperProgress = 0.65;
-                  });
-                  _sendMidi('90 41 7F');
-                },
+                onClear: () => _sendMidi(_looperStateManager.getClearCommand()),
+                onUndo: () => _sendMidi(_looperStateManager.getUndoRedoCommand()),
+                onRec: () => _sendMidi(_looperStateManager.getRecordCommand()),
+                onStop: () => _sendMidi(_looperStateManager.getStopCommand()),
               ),
             ),
           ],

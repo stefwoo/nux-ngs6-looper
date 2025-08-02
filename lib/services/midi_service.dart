@@ -3,6 +3,9 @@ import '../models/midi_device.dart';
 
 class MidiService {
   static const platform = MethodChannel('com.example.midi_controller/usb');
+  
+  // MIDI消息回调函数
+  Function(String)? _onMidiMessageReceived;
 
   Future<List<MidiDevice>> getUsbDevices() async {
     try {
@@ -38,6 +41,31 @@ class MidiService {
     }
   }
 
+  /// 开始监听MIDI回传信号
+  Future<bool> startMidiListening(int deviceId) async {
+    try {
+      return await platform.invokeMethod('startMidiListening', {
+        'deviceId': deviceId,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Failed to start MIDI listening: ${e.message}');
+    }
+  }
+
+  /// 停止监听MIDI回传信号
+  Future<bool> stopMidiListening() async {
+    try {
+      return await platform.invokeMethod('stopMidiListening');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to stop MIDI listening: ${e.message}');
+    }
+  }
+
+  /// 设置MIDI消息接收回调
+  void setMidiMessageListener(Function(String) onMessageReceived) {
+    _onMidiMessageReceived = onMessageReceived;
+  }
+
   void setDeviceListListener(Function(List<MidiDevice>) onUpdate) {
     platform.setMethodCallHandler((call) async {
       if (call.method == 'onDeviceListUpdated') {
@@ -48,6 +76,9 @@ class MidiService {
           return MidiDevice.fromMap(map);
         }).toList();
         onUpdate(devices);
+      } else if (call.method == 'onMidiMessageReceived') {
+        final message = call.arguments as String;
+        _onMidiMessageReceived?.call(message);
       }
     });
   }

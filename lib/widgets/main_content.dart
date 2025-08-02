@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../models/looper_state.dart';
 import 'drum_controls.dart';
 import 'looper_status.dart';
 import 'looper_controls.dart';
@@ -9,6 +10,7 @@ class MainContent extends StatelessWidget {
   final int drumStyle;
   final String looperStatus;
   final double looperProgress;
+  final LooperButtonStates buttonStates;
   final ValueChanged<bool> onDrumToggle;
   final ValueChanged<int> onDrumStyleChange;
   final VoidCallback onClear;
@@ -22,6 +24,7 @@ class MainContent extends StatelessWidget {
     required this.drumStyle,
     required this.looperStatus,
     required this.looperProgress,
+    required this.buttonStates,
     required this.onDrumToggle,
     required this.onDrumStyleChange,
     required this.onClear,
@@ -56,6 +59,7 @@ class MainContent extends StatelessWidget {
                     onUndo: onUndo,
                     onRec: onRec,
                     onStop: onStop,
+                    buttonStates: buttonStates,
                   ),
                   const Spacer(), // 填充剩余空间
                   Padding(
