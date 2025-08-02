@@ -24,12 +24,15 @@ class MainActivity : FlutterActivity() {
     private lateinit var permissionIntent: PendingIntent
     private lateinit var methodChannel: MethodChannel
     
-    // MIDI接收相关
+    // MIDI连接管理 - 统一的连接用于发送和接收
     private var midiConnection: UsbDeviceConnection? = null
     private var midiInEndpoint: UsbEndpoint? = null
-    private var midiInterface: UsbInterface? = null
+    private var midiOutEndpoint: UsbEndpoint? = null
+    private var midiInInterface: UsbInterface? = null
+    private var midiOutInterface: UsbInterface? = null
     private var midiListeningThread: Thread? = null
     private var isListening = false
+    private var currentDeviceId: Int? = null
 
     private val usbPermissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -78,24 +81,184 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * 停止MIDI监听
+     * 停止MIDI连接
      */
-    private fun stopMidiListening() {
+    private fun stopMidiConnection() {
         isListening = false
         midiListeningThread?.interrupt()
         midiListeningThread = null
         
         try {
-            midiInterface?.let { midiConnection?.releaseInterface(it) }
+            midiInInterface?.let { midiConnection?.releaseInterface(it) }
+            midiOutInterface?.let { 
+                if (it != midiInInterface) midiConnection?.releaseInterface(it) 
+            }
             midiConnection?.close()
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping MIDI listening", e)
+            Log.e(TAG, "Error stopping MIDI connection", e)
         }
         
         midiConnection = null
         midiInEndpoint = null
-        midiInterface = null
-        Log.d(TAG, "MIDI listening stopped")
+        midiOutEndpoint = null
+        midiInInterface = null
+        midiOutInterface = null
+        currentDeviceId = null
+        Log.d(TAG, "MIDI connection stopped")
+    }
+
+    /**
+     * 停止MIDI监听（保持兼容性）
+     */
+    private fun stopMidiListening() {
+        stopMidiConnection()
+    }
+
+    /**
+     * 建立持久MIDI连接（用于发送和接收）
+     */
+    private fun establishMidiConnection(deviceId: Int): Boolean {
+        Log.d(TAG, "🔗 Establishing MIDI connection for device $deviceId")
+        
+        try {
+            // 如果已经连接到同一设备，不需要重新连接
+            if (currentDeviceId == deviceId && midiConnection != null) {
+                Log.d(TAG, "✅ Already connected to device $deviceId")
+                Log.d(TAG, "🔍 Current connection status - Input: ${midiInEndpoint != null}, Output: ${midiOutEndpoint != null}")
+                return true
+            }
+            
+            // 先停止之前的连接
+            Log.d(TAG, "🔄 Stopping previous connections...")
+            stopMidiConnection()
+            
+            val device = usbManager.deviceList.values.find { it.deviceId == deviceId }
+            if (device == null) {
+                Log.e(TAG, "❌ Device not found: $deviceId")
+                return false
+            }
+
+            Log.d(TAG, "📱 Device info: ${getDeviceFriendlyName(device)} (VID:${String.format("%04X", device.vendorId)} PID:${String.format("%04X", device.productId)})")
+
+            if (!usbManager.hasPermission(device)) {
+                Log.e(TAG, "❌ No permission for device $deviceId")
+                return false
+            }
+
+            Log.d(TAG, "🔓 Opening device connection...")
+            val connection = usbManager.openDevice(device)
+            if (connection == null) {
+                Log.e(TAG, "❌ Failed to open device $deviceId")
+                return false
+            }
+
+            Log.d(TAG, "🔍 Scanning device interfaces (total: ${device.interfaceCount})...")
+            
+            // 寻找MIDI输入和输出接口及端点
+            var inputInterface: UsbInterface? = null
+            var inputEndpoint: UsbEndpoint? = null
+            var outputInterface: UsbInterface? = null
+            var outputEndpoint: UsbEndpoint? = null
+
+            for (i in 0 until device.interfaceCount) {
+                val usbInterface = device.getInterface(i)
+                Log.d(TAG, "🔍 Interface $i: class=${usbInterface.interfaceClass}, subclass=${usbInterface.interfaceSubclass}, protocol=${usbInterface.interfaceProtocol}, endpoints=${usbInterface.endpointCount}")
+                
+                // 检查是否为音频类设备
+                val isAudioClass = usbInterface.interfaceClass == UsbConstants.USB_CLASS_AUDIO
+                val isMidiStreaming = usbInterface.interfaceSubclass == 3
+                Log.d(TAG, "   📊 Audio class: $isAudioClass, MIDI streaming: $isMidiStreaming")
+                
+                // 检查端点
+                for (j in 0 until usbInterface.endpointCount) {
+                    val endpoint = usbInterface.getEndpoint(j)
+                    val directionStr = if (endpoint.direction == UsbConstants.USB_DIR_IN) "IN" else "OUT"
+                    val typeStr = when (endpoint.type) {
+                        UsbConstants.USB_ENDPOINT_XFER_BULK -> "BULK"
+                        UsbConstants.USB_ENDPOINT_XFER_INT -> "INTERRUPT"
+                        UsbConstants.USB_ENDPOINT_XFER_ISOC -> "ISOCHRONOUS"
+                        UsbConstants.USB_ENDPOINT_XFER_CONTROL -> "CONTROL"
+                        else -> "UNKNOWN"
+                    }
+                    Log.d(TAG, "   🔌 Endpoint $j: direction=$directionStr, type=$typeStr, address=${String.format("0x%02X", endpoint.address)}")
+                    
+                    if (endpoint.direction == UsbConstants.USB_DIR_IN && inputInterface == null) {
+                        inputInterface = usbInterface
+                        inputEndpoint = endpoint
+                        Log.d(TAG, "   ✅ Found MIDI INPUT endpoint in interface $i, endpoint $j")
+                        Log.d(TAG, "   📋 Input endpoint details: address=${String.format("0x%02X", endpoint.address)}, maxPacketSize=${endpoint.maxPacketSize}")
+                    } else if (endpoint.direction == UsbConstants.USB_DIR_OUT && outputInterface == null) {
+                        outputInterface = usbInterface
+                        outputEndpoint = endpoint
+                        Log.d(TAG, "   ✅ Found MIDI OUTPUT endpoint in interface $i, endpoint $j")
+                        Log.d(TAG, "   📋 Output endpoint details: address=${String.format("0x%02X", endpoint.address)}, maxPacketSize=${endpoint.maxPacketSize}")
+                    }
+                }
+            }
+
+            Log.d(TAG, "🔍 Interface discovery completed:")
+            Log.d(TAG, "   📥 Input interface found: ${inputInterface != null}")
+            Log.d(TAG, "   📤 Output interface found: ${outputInterface != null}")
+            Log.d(TAG, "   🔗 Same interface: ${inputInterface == outputInterface}")
+
+            if (outputInterface == null || outputEndpoint == null) {
+                Log.e(TAG, "❌ MIDI output interface or endpoint not found")
+                connection.close()
+                return false
+            }
+
+            // 声明输出接口（必需）
+            Log.d(TAG, "🔒 Claiming output interface (force=true)...")
+            if (!connection.claimInterface(outputInterface, true)) {
+                Log.e(TAG, "❌ Failed to claim output interface")
+                connection.close()
+                return false
+            }
+            Log.d(TAG, "✅ Output interface claimed successfully")
+
+            // 声明输入接口（如果存在且与输出接口不同）
+            if (inputInterface != null) {
+                if (inputInterface != outputInterface) {
+                    Log.d(TAG, "🔒 Claiming separate input interface (force=false)...")
+                    if (!connection.claimInterface(inputInterface, false)) {
+                        Log.w(TAG, "⚠️ Failed to claim input interface non-exclusively, trying force claim")
+                        if (!connection.claimInterface(inputInterface, true)) {
+                            Log.w(TAG, "❌ Failed to claim input interface, input disabled")
+                            inputInterface = null
+                            inputEndpoint = null
+                        } else {
+                            Log.d(TAG, "✅ Input interface claimed with force=true")
+                        }
+                    } else {
+                        Log.d(TAG, "✅ Input interface claimed non-exclusively")
+                    }
+                } else {
+                    Log.d(TAG, "ℹ️ Input and output use same interface - already claimed")
+                }
+            } else {
+                Log.w(TAG, "⚠️ No input interface found - listening will be disabled")
+            }
+
+            // 保存连接信息
+            midiConnection = connection
+            midiInInterface = inputInterface
+            midiOutInterface = outputInterface
+            midiInEndpoint = inputEndpoint
+            midiOutEndpoint = outputEndpoint
+            currentDeviceId = deviceId
+
+            Log.d(TAG, "✅ MIDI connection established for device $deviceId")
+            Log.d(TAG, "📊 Final status:")
+            Log.d(TAG, "   📥 Input available: ${inputInterface != null}")
+            Log.d(TAG, "   📤 Output available: ${outputInterface != null}")
+            Log.d(TAG, "   🔗 Connection object: ${connection != null}")
+            
+            return true
+
+        } catch (e: Exception) {
+            Log.e(TAG, "💥 Error establishing MIDI connection", e)
+            return false
+        }
     }
 
     /**
@@ -103,65 +266,17 @@ class MainActivity : FlutterActivity() {
      */
     private fun startMidiListening(deviceId: Int): Boolean {
         try {
-            // 先停止之前的监听
-            stopMidiListening()
-            
-            val device = usbManager.deviceList.values.find { it.deviceId == deviceId }
-            if (device == null) {
-                Log.e(TAG, "Device not found for listening")
+            // 先建立连接
+            if (!establishMidiConnection(deviceId)) {
                 return false
             }
 
-            if (!usbManager.hasPermission(device)) {
-                Log.e(TAG, "No permission for device")
+            // 检查是否有输入端点
+            if (midiInEndpoint == null) {
+                Log.w(TAG, "No input endpoint available for listening")
                 return false
             }
 
-            val connection = usbManager.openDevice(device)
-            if (connection == null) {
-                Log.e(TAG, "Failed to open device for listening")
-                return false
-            }
-
-            // 寻找MIDI输入接口和端点，但要避免与输出接口冲突
-            var inputInterface: UsbInterface? = null
-            var inputEndpoint: UsbEndpoint? = null
-
-            for (i in 0 until device.interfaceCount) {
-                val usbInterface = device.getInterface(i)
-                
-                // 检查是否有输入端点
-                for (j in 0 until usbInterface.endpointCount) {
-                    val endpoint = usbInterface.getEndpoint(j)
-                    if (endpoint.direction == UsbConstants.USB_DIR_IN) {
-                        inputInterface = usbInterface
-                        inputEndpoint = endpoint
-                        Log.d(TAG, "Found MIDI input endpoint in interface $i, endpoint $j")
-                        break
-                    }
-                }
-                if (inputInterface != null) break
-            }
-
-            if (inputInterface == null || inputEndpoint == null) {
-                Log.w(TAG, "MIDI input interface or endpoint not found, listening disabled")
-                connection.close()
-                return false
-            }
-
-            // 尝试声明接口，但不强制独占
-            if (!connection.claimInterface(inputInterface, false)) {
-                Log.w(TAG, "Failed to claim input interface non-exclusively, trying force claim")
-                if (!connection.claimInterface(inputInterface, true)) {
-                    Log.e(TAG, "Failed to claim input interface")
-                    connection.close()
-                    return false
-                }
-            }
-
-            midiConnection = connection
-            midiInterface = inputInterface
-            midiInEndpoint = inputEndpoint
             isListening = true
 
             // 启动监听线程
@@ -183,45 +298,94 @@ class MainActivity : FlutterActivity() {
      * 监听MIDI消息的主循环
      */
     private fun listenForMidiMessages() {
+        Log.d(TAG, "🎧 MIDI listening thread started")
+        Log.d(TAG, "🔍 Thread ID: ${Thread.currentThread().id}, Name: ${Thread.currentThread().name}")
+        Log.d(TAG, "🔍 Initial isListening: $isListening")
+        Log.d(TAG, "🔍 Connection available: ${midiConnection != null}")
+        Log.d(TAG, "🔍 Input endpoint available: ${midiInEndpoint != null}")
+        
         val buffer = ByteArray(64) // USB MIDI包通常是4字节，但分配更大的缓冲区以防万一
+        var loopCount = 0
+        var lastLogTime = System.currentTimeMillis()
         
         while (isListening && !Thread.currentThread().isInterrupted()) {
+            loopCount++
+            val currentTime = System.currentTimeMillis()
+            
+            // 每5秒输出一次心跳日志
+            if (currentTime - lastLogTime >= 5000) {
+                Log.d(TAG, "🔄 MIDI listening heartbeat - Loop count: $loopCount, isListening: $isListening")
+                Log.d(TAG, "🔍 Connection status: ${midiConnection != null}, Endpoint status: ${midiInEndpoint != null}")
+                lastLogTime = currentTime
+            }
+            
             try {
-                val connection = midiConnection ?: break
-                val endpoint = midiInEndpoint ?: break
+                val connection = midiConnection
+                if (connection == null) {
+                    Log.e(TAG, "❌ Connection lost during listening")
+                    break
+                }
+                val endpoint = midiInEndpoint
+                if (endpoint == null) {
+                    Log.e(TAG, "❌ Input endpoint lost during listening")
+                    break
+                }
                 
+                // 增加详细的bulkTransfer调试
+                val startTime = System.currentTimeMillis()
                 val bytesRead = connection.bulkTransfer(endpoint, buffer, buffer.size, 100) // 100ms超时
+                val transferTime = System.currentTimeMillis() - startTime
+                
+                // 记录所有bulkTransfer调用结果，包括0字节的
+                if (loopCount <= 10 || bytesRead > 0 || transferTime > 50) {
+                    Log.d(TAG, "📡 bulkTransfer result: $bytesRead bytes, time: ${transferTime}ms, loop: $loopCount")
+                }
                 
                 if (bytesRead > 0) {
+                    Log.d(TAG, "🎵 Received $bytesRead bytes of MIDI data!")
+                    Log.d(TAG, "📊 Raw buffer: ${buffer.take(bytesRead).joinToString(" ") { "%02X".format(it) }}")
+                    
                     // 解析USB MIDI包
                     for (i in 0 until bytesRead step 4) {
                         if (i + 3 < bytesRead) {
                             val packet = buffer.sliceArray(i until i + 4)
+                            Log.d(TAG, "📦 Processing packet $i: ${packet.joinToString(" ") { "%02X".format(it) }}")
+                            
                             val midiMessage = parseUsbMidiPacket(packet)
                             if (midiMessage.isNotEmpty()) {
                                 // 转换为十六进制字符串格式
                                 val messageString = midiMessage.joinToString(" ") { "%02X".format(it) }
-                                Log.d(TAG, "Received MIDI message: $messageString")
-                                Log.d(TAG, "USB MIDI packet: ${packet.joinToString(" ") { "%02X".format(it) }}")
+                                Log.d(TAG, "✅ Parsed MIDI message: $messageString")
+                                Log.d(TAG, "📤 Sending to Flutter: $messageString")
                                 
                                 // 通知Flutter端
                                 runOnUiThread {
                                     if (::methodChannel.isInitialized) {
                                         methodChannel.invokeMethod("onMidiMessageReceived", messageString)
+                                        Log.d(TAG, "✅ Message sent to Flutter successfully")
+                                    } else {
+                                        Log.e(TAG, "❌ Method channel not initialized")
                                     }
                                 }
+                            } else {
+                                Log.w(TAG, "⚠️ Packet parsed to empty MIDI message: ${packet.joinToString(" ") { "%02X".format(it) }}")
                             }
+                        } else {
+                            Log.w(TAG, "⚠️ Incomplete packet at position $i, total bytes: $bytesRead")
                         }
                     }
+                } else if (bytesRead < 0) {
+                    Log.w(TAG, "⚠️ bulkTransfer returned error: $bytesRead")
                 }
             } catch (e: Exception) {
                 if (isListening) {
-                    Log.e(TAG, "Error in MIDI listening loop", e)
+                    Log.e(TAG, "💥 Error in MIDI listening loop (loop $loopCount)", e)
                 }
                 break
             }
         }
-        Log.d(TAG, "MIDI listening loop ended")
+        Log.d(TAG, "🛑 MIDI listening loop ended - Final loop count: $loopCount")
+        Log.d(TAG, "🔍 Final state - isListening: $isListening, interrupted: ${Thread.currentThread().isInterrupted()}")
     }
 
     /**
@@ -231,7 +395,17 @@ class MainActivity : FlutterActivity() {
         if (packet.size < 4) return byteArrayOf()
         
         val cableAndCode = packet[0].toInt() and 0xFF
+        val cableNumber = (cableAndCode shr 4) and 0x0F // 提取Cable Number
         val codeIndexNumber = cableAndCode and 0x0F
+        
+        // 记录Cable Number信息用于调试
+        Log.d(TAG, "📦 Parsing packet: cable=$cableNumber, code=$codeIndexNumber")
+        
+        // 接受来自Cable 2的输入（基于PC测试结果）
+        if (cableNumber != 2) {
+            Log.d(TAG, "⚠️ Ignoring packet from cable $cableNumber (expecting cable 2)")
+            return byteArrayOf()
+        }
         
         // 根据Code Index Number确定MIDI消息长度
         val midiLength = when (codeIndexNumber) {
@@ -305,12 +479,13 @@ class MainActivity : FlutterActivity() {
      * 字节0: Cable Number (4位) + Code Index Number (4位)
      * 字节1-3: MIDI消息 (最多3字节)
      */
-    private fun createUsbMidiPacket(midiBytes: ByteArray): ByteArray {
+    private fun createUsbMidiPacket(midiBytes: ByteArray, cableNumber: Int = 1): ByteArray {
         if (midiBytes.isEmpty()) {
             return byteArrayOf()
         }
 
-        val cableNumber = 0 // 通常使用cable 0
+        // 使用cable 1作为输出端口（基于PC测试结果）
+        val actualCableNumber = cableNumber and 0x0F // 确保只用4位
         val statusByte = midiBytes[0].toInt() and 0xFF
         
         // 根据MIDI消息类型确定Code Index Number
@@ -350,7 +525,7 @@ class MainActivity : FlutterActivity() {
 
         // 构建4字节USB MIDI包
         val packet = ByteArray(4)
-        packet[0] = ((cableNumber shl 4) or codeIndexNumber).toByte()
+        packet[0] = ((actualCableNumber shl 4) or codeIndexNumber).toByte()
         
         // 复制MIDI数据，不足3字节的用0填充
         for (i in 0 until minOf(3, midiBytes.size)) {
@@ -455,10 +630,21 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+                    // 记录当前是否在监听状态
+                    val wasListening = isListening
+                    val savedDeviceId = currentDeviceId
+
                     try {
+                        // 如果正在监听，先临时停止监听以释放接口资源
+                        if (wasListening) {
+                            Log.d(TAG, "Temporarily stopping listening for MIDI send")
+                            stopMidiConnection()
+                        }
+
+                        // 使用独立连接发送MIDI消息
                         val connection = usbManager.openDevice(device)
                         if (connection == null) {
-                            result.error("CONNECTION_FAILED", "Failed to open USB device", null)
+                            result.error("CONNECTION_FAILED", "Failed to open device for sending", null)
                             return@setMethodCallHandler
                         }
 
@@ -467,7 +653,6 @@ class MainActivity : FlutterActivity() {
                         
                         for (i in 0 until device.interfaceCount) {
                             val usbInterface = device.getInterface(i)
-                            Log.d(TAG, "Interface $i: class=${usbInterface.interfaceClass}, subclass=${usbInterface.interfaceSubclass}, protocol=${usbInterface.interfaceProtocol}")
                             
                             // 首先检查标准MIDI接口 (Audio class, MIDI Streaming subclass)
                             if (usbInterface.interfaceClass == UsbConstants.USB_CLASS_AUDIO && 
@@ -475,7 +660,6 @@ class MainActivity : FlutterActivity() {
                                 Log.d(TAG, "Found standard MIDI interface: $i")
                                 for (j in 0 until usbInterface.endpointCount) {
                                     val endpoint = usbInterface.getEndpoint(j)
-                                    Log.d(TAG, "Endpoint $j: direction=${endpoint.direction}, type=${endpoint.type}")
                                     if (endpoint.direction == UsbConstants.USB_DIR_OUT) {
                                         midiInterface = usbInterface
                                         Log.d(TAG, "Found MIDI output endpoint in interface $i, endpoint $j")
@@ -504,11 +688,13 @@ class MainActivity : FlutterActivity() {
                         }
 
                         if (midiInterface == null) {
+                            connection.close()
                             result.error("MIDI_INTERFACE_NOT_FOUND", "MIDI interface not found", null)
                             return@setMethodCallHandler
                         }
 
                         if (!connection.claimInterface(midiInterface, true)) {
+                            connection.close()
                             result.error("INTERFACE_CLAIM_FAILED", "Failed to claim interface", null)
                             return@setMethodCallHandler
                         }
@@ -523,6 +709,8 @@ class MainActivity : FlutterActivity() {
                         }
 
                         if (outEndpoint == null) {
+                            connection.releaseInterface(midiInterface)
+                            connection.close()
                             result.error("MIDI_OUT_ENDPOINT_NOT_FOUND", "MIDI output endpoint not found", null)
                             return@setMethodCallHandler
                         }
@@ -530,6 +718,8 @@ class MainActivity : FlutterActivity() {
                         val midiBytes = try {
                             message.split(" ").map { it.toInt(16).toByte() }.toByteArray()
                         } catch (e: Exception) {
+                            connection.releaseInterface(midiInterface)
+                            connection.close()
                             result.error("INVALID_MESSAGE", "Invalid MIDI format", null)
                             return@setMethodCallHandler
                         }
@@ -544,6 +734,7 @@ class MainActivity : FlutterActivity() {
                         try {
                             val transferred = connection.bulkTransfer(outEndpoint, usbMidiPacket, usbMidiPacket.size, 1000)
                             Log.d(TAG, "Transfer result: $transferred bytes sent, expected ${usbMidiPacket.size}")
+                            
                             if (transferred == usbMidiPacket.size) {
                                 result.success(true)
                             } else {
@@ -551,19 +742,25 @@ class MainActivity : FlutterActivity() {
                                 result.error("TRANSFER_FAILED", "Failed to send MIDI", null)
                             }
                         } finally {
+                            // 确保释放发送连接资源
                             try {
                                 connection.releaseInterface(midiInterface)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error releasing interface", e)
-                            }
-                            try {
                                 connection.close()
+                                Log.d(TAG, "Send connection closed")
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error closing connection", e)
+                                Log.e(TAG, "Error closing send connection", e)
                             }
                         }
+                        
                     } catch (e: Exception) {
+                        Log.e(TAG, "Error sending MIDI message", e)
                         result.error("EXCEPTION", e.message, null)
+                    } finally {
+                        // 如果之前在监听，立即恢复监听状态
+                        if (wasListening && savedDeviceId != null) {
+                            Log.d(TAG, "Restoring listening after MIDI send")
+                            startMidiListening(savedDeviceId)
+                        }
                     }
                 }
                 "startMidiListening" -> {

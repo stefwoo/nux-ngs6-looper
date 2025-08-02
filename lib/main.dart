@@ -191,6 +191,10 @@ class _MidiControllerPageState extends State<MidiControllerPage> {
                   selectedDeviceId = device.deviceId;
                   selectedDeviceName = device.deviceName;
                 });
+                // 选择设备后自动开始监听
+                if (device.hasPermission) {
+                  _startMidiListening();
+                }
               },
               onRefreshDevices: _loadDevices,
             ),

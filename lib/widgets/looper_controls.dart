@@ -79,7 +79,7 @@ class _LooperControlsState extends State<LooperControls>
                 text: widget.buttonStates.clear.text,
                 bgColor: AppColors.clearButtonBg,
                 iconColor: AppColors.accentPurple,
-                enabled: widget.buttonStates.clear.enabled,
+                enabled: true,  // 强制启用Clear按钮
                 onTap: widget.onClear,
               ),
             ),
@@ -90,7 +90,7 @@ class _LooperControlsState extends State<LooperControls>
                 text: widget.buttonStates.undoRedo.text,
                 bgColor: AppColors.undoButtonBg,
                 iconColor: AppColors.accentBlue,
-                enabled: widget.buttonStates.undoRedo.enabled,
+                enabled: true,  // 强制启用Undo按钮
                 onTap: widget.onUndo,
               ),
             ),
@@ -127,7 +127,7 @@ class _LooperControlsState extends State<LooperControls>
                 text: widget.buttonStates.stop.text,
                 bgColor: AppColors.stopButtonBg,
                 iconColor: AppColors.accentRed,
-                enabled: widget.buttonStates.stop.enabled,
+                enabled: true,  // 强制启用Stop按钮
                 onTap: widget.onStop,
               ),
             ),
