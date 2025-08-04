@@ -8,6 +8,8 @@ This is a simple mobile application designed to control the Drum Machine and Loo
 
 This app provides a straightforward and easy-to-use interface to manage the drum machine and looper, making it much more convenient for daily practice and jamming.
 
+![App Screenshot](assets/Screenshot.jpg)
+
 - **Official Product Page (CN):** [https://cn.nuxaudio.com/product/ampacademy/](https://cn.nuxaudio.com/product/ampacademy/)
 - **Official Product Page (EN):** [https://nuxaudio.com/product/ampacademy/](https://nuxaudio.com/product/ampacademy/)
 
@@ -40,6 +42,8 @@ For more details, you can refer to the [LOOPER_MIDI_ENHANCEMENT_PLAN.md](LOOPER_
 这是一个简单的移动端应用，用于控制 NUX Amp Academy (NGS-6) 效果器的鼓机和乐句循环（LOOPER）功能。我开发这个应用纯粹是个人爱好，因为我发现直接在设备上或者通过官方电脑软件操作这些功能很不方便，而官方的移动应用则完全没有提供这些功能的控制界面。
 
 这个应用提供了一个简单直观的界面来管理鼓机和乐句循环，为日常练习和演奏带来了极大的便利。
+
+![应用截图](assets/Screenshot.jpg)
 
 - **官方产品页面（中文）:** [https://cn.nuxaudio.com/product/ampacademy/](https://cn.nuxaudio.com/product/ampacademy/)
 - **官方产品页面（英文）:** [https://nuxaudio.com/product/ampacademy/](https://nuxaudio.com/product/ampacademy/)
