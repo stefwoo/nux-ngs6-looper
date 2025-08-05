@@ -1,11 +1,11 @@
 {
-    "name": "NGS6 LOOPER",
-    "short_name": "NGS6 LOOPER",
+    "name": "midi_controller",
+    "short_name": "midi_controller",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "NGS6 LOOPER",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

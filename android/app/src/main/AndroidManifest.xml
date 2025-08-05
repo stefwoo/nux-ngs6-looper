@@ -1,15 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.USB_PERMISSION" />
-    <uses-feature android:name="android.hardware.usb.host" />
-    <uses-feature android:name="android.software.midi" />
-    <uses-permission android:name="android.permission.MANAGE_USB" />
-    
     <application
-        android:label="NGS6 LOOPER"
+        android:label="midi_controller"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
-        <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-            android:resource="@xml/device_filter" />
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -18,8 +11,7 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:enableOnBackInvokedCallback="true">
+            android:windowSoftInputMode="adjustResize">
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
@@ -32,16 +24,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- 注释掉USB自动唤醒功能，避免插入USB时自动启动应用 -->
-            <!-- 
-            <intent-filter>
-                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-                <action android:name="android.hardware.usb.action.USB_DEVICE_DETACHED" />
-            </intent-filter>
-            <meta-data
-                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                android:resource="@xml/device_filter" />
-            -->
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
