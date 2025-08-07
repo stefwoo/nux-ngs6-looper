@@ -264,6 +264,24 @@ class LooperStatusWidget extends StatelessWidget {
                           color: Colors.lightBlueAccent),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  if (state.recButtonState == RecButtonState.recording)
+                    Text(
+                      _formatDuration(state.recordingTime),
+                      style: const TextStyle(fontSize: 18, color: Colors.white, fontFamily: 'monospace'),
+                    ),
+                  if ((state.recButtonState == RecButtonState.playing ||
+                          state.recButtonState == RecButtonState.duoRecComplete) &&
+                      state.loopDuration != null &&
+                      state.loopDuration! > Duration.zero)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: LinearProgressIndicator(
+                        value: state.playbackProgress,
+                        backgroundColor: Colors.grey,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+                      ),
+                    ),
                 ],
               );
             },
