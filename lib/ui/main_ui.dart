@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_midi_command/flutter_midi_command.dart';
 import 'package:midi_controller/bloc/app_cubit.dart';
 import 'package:midi_controller/services/permission_handler.dart';
+import 'package:midi_controller/ui/drum_styles.dart';
 
 class MainUI extends StatefulWidget {
   final PermissionHandlerService permissionHandler;
@@ -129,25 +130,25 @@ class StyleControlWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Style (0-42)', style: TextStyle(fontSize: 18)),
             BlocBuilder<AppCubit, AppState>(
               builder: (context, state) {
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text('Style: ${drumStyles[state.drumStyle]}',
+                        style: const TextStyle(fontSize: 18)),
                     Row(
                       children: [
                         Expanded(
                           child: Slider(
                             value: state.drumStyle.toDouble(),
                             min: 0,
-                            max: 42,
-                            divisions: 42,
-                            onChanged: (value) => context.read<AppCubit>().changeDrumStyle(value.toInt()),
+                            max: 66,
+                            divisions: 66,
+                            onChanged: (value) => context
+                                .read<AppCubit>()
+                                .changeDrumStyle(value.toInt()),
                           ),
-                        ),
-                        Text(
-                          state.drumStyle.toRadixString(16).toUpperCase().padLeft(2, '0'),
-                          style: const TextStyle(fontSize: 16),
                         ),
                       ],
                     ),
@@ -159,7 +160,9 @@ class StyleControlWidget extends StatelessWidget {
                           onPressed: () {
                             final currentStyle = state.drumStyle;
                             if (currentStyle > 0) {
-                              context.read<AppCubit>().changeDrumStyle(currentStyle - 1);
+                              context.read<AppCubit>().changeDrumStyle(
+                                currentStyle - 1,
+                              );
                             }
                           },
                         ),
@@ -167,8 +170,10 @@ class StyleControlWidget extends StatelessWidget {
                           icon: const Icon(Icons.add),
                           onPressed: () {
                             final currentStyle = state.drumStyle;
-                            if (currentStyle < 42) {
-                              context.read<AppCubit>().changeDrumStyle(currentStyle + 1);
+                            if (currentStyle < 66) {
+                              context.read<AppCubit>().changeDrumStyle(
+                                currentStyle + 1,
+                              );
                             }
                           },
                         ),
@@ -193,7 +198,10 @@ class LooperSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('LOOPER', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        const Text(
+          'LOOPER',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 10),
         const LooperStatusWidget(),
         const SizedBox(height: 20),
@@ -231,7 +239,10 @@ class LooperStatusWidget extends StatelessWidget {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
     String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    String twoDigitMilliseconds = (duration.inMilliseconds % 1000).toString().padLeft(3, '0').substring(0, 2);
+    String twoDigitMilliseconds = (duration.inMilliseconds % 1000)
+        .toString()
+        .padLeft(3, '0')
+        .substring(0, 2);
     return "$twoDigitMinutes:$twoDigitSeconds.$twoDigitMilliseconds";
   }
 
@@ -248,38 +259,58 @@ class LooperStatusWidget extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text('Current Status', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  const Text(
+                    'Current Status',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
                   const SizedBox(height: 4),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          );
+                        },
                     child: Text(
                       _getStatusText(state),
-                      key: ValueKey<String>(_getStatusText(state)), // Important for AnimatedSwitcher
+                      key: ValueKey<String>(
+                        _getStatusText(state),
+                      ), // Important for AnimatedSwitcher
                       style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.lightBlueAccent),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.lightBlueAccent,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   if (state.recButtonState == RecButtonState.recording)
                     Text(
                       _formatDuration(state.recordingTime),
-                      style: const TextStyle(fontSize: 18, color: Colors.white, fontFamily: 'monospace'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                        fontFamily: 'monospace',
+                      ),
                     ),
                   if ((state.recButtonState == RecButtonState.playing ||
-                          state.recButtonState == RecButtonState.duoRecComplete) &&
+                          state.recButtonState ==
+                              RecButtonState.duoRecComplete) &&
                       state.loopDuration != null &&
                       state.loopDuration! > Duration.zero)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
+                      ),
                       child: LinearProgressIndicator(
                         value: state.playbackProgress,
                         backgroundColor: Colors.grey,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.lightBlueAccent,
+                        ),
                       ),
                     ),
                 ],
@@ -322,7 +353,9 @@ class LooperControlsWidget extends StatelessWidget {
               label: isRedo ? 'REDO' : 'UNDO',
               icon: isRedo ? Icons.redo : Icons.undo,
               // 只有在可Undo/Redo时才响应点击
-              onPressed: canUndo ? () => context.read<AppCubit>().pressUndo() : () {},
+              onPressed: canUndo
+                  ? () => context.read<AppCubit>().pressUndo()
+                  : () {},
               // 当按钮不可用时，可以改变颜色以提示用户
               color: canUndo ? Colors.blue : Colors.grey,
             );
@@ -366,9 +399,7 @@ class _LooperButton extends StatelessWidget {
       label: Text(label, style: const TextStyle(color: Colors.white)),
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

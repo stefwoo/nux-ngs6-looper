@@ -29,8 +29,10 @@ class AppCubit extends Cubit<AppState> {
   }
 
   void changeDrumStyle(int style) {
-    _midiEngine.sendCcMessage(0x2A, style);
-    emit(state.copyWith(drumStyle: style));
+    if (style >= 0 && style <= 66) {
+      _midiEngine.sendCcMessage(0x2A, style);
+      emit(state.copyWith(drumStyle: style));
+    }
   }
 
   void pressRec() {
