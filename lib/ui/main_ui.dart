@@ -207,25 +207,32 @@ class LooperStatusWidget extends StatelessWidget {
   const LooperStatusWidget({super.key});
 
   String _getStatusText(AppState state) {
-    if (state.undoButtonState == UndoButtonState.undo) return 'Undo';
-    if (state.undoButtonState == UndoButtonState.redo) return 'Redo';
-
     switch (state.recButtonState) {
       case RecButtonState.rec:
         return 'Ready';
       case RecButtonState.waitRec:
         return 'Wait Rec';
       case RecButtonState.recording:
-        return 'Recording';
+        return 'Recording Layer 1';
       case RecButtonState.playing:
-        return 'Playing';
+      case RecButtonState.duoRecComplete:
+        return 'Playing Layer ${state.layerCount}';
       case RecButtonState.duoRec:
-        return 'Dubbing';
+        // 使用 layerCout 显示正在叠加的层数
+        return 'Dubbing Layer ${state.layerCount}';
       case RecButtonState.play:
         return 'Stopped';
       default:
         return 'Unknown';
     }
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    String twoDigitMilliseconds = (duration.inMilliseconds % 1000).toString().padLeft(3, '0').substring(0, 2);
+    return "$twoDigitMinutes:$twoDigitSeconds.$twoDigitMilliseconds";
   }
 
   @override
@@ -286,11 +293,22 @@ class LooperControlsWidget extends StatelessWidget {
           onPressed: () => context.read<AppCubit>().pressClear(),
           color: Colors.purple,
         ),
-        _LooperButton(
-          label: 'UNDO',
-          icon: Icons.undo,
-          onPressed: () => context.read<AppCubit>().pressUndo(),
-          color: Colors.blue,
+        // 将Undo按钮包裹在BlocBuilder中以动态更新
+        BlocBuilder<AppCubit, AppState>(
+          builder: (context, state) {
+            final isRedo = state.undoButtonState == UndoButtonState.redo;
+            final canUndo = state.undoButtonState != UndoButtonState.none;
+
+            return _LooperButton(
+              // 动态改变Label
+              label: isRedo ? 'REDO' : 'UNDO',
+              icon: isRedo ? Icons.redo : Icons.undo,
+              // 只有在可Undo/Redo时才响应点击
+              onPressed: canUndo ? () => context.read<AppCubit>().pressUndo() : () {},
+              // 当按钮不可用时，可以改变颜色以提示用户
+              color: canUndo ? Colors.blue : Colors.grey,
+            );
+          },
         ),
         _LooperButton(
           label: 'REC',
