@@ -49,6 +49,6 @@ If you find this project helpful, please consider supporting me to keep it maint
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01J55JO)
 
-### Alipay & WeChat
+###  WeChat
 
-<img src="asst/zfb.jpg" width="150"> <img src="asst/wx.png" width="150">
+<img src="asst/wx.png" width="150">

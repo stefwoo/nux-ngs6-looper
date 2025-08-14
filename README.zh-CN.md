@@ -48,6 +48,6 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01J55JO)
 
-### 支付宝 & 微信
+### 微信
 
-<img src="asst/zfb.jpg" width="150"> <img src="asst/wx.png" width="150">
+<img src="asst/wx.png" width="150">
